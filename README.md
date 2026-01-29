@@ -56,7 +56,7 @@ The easiest way to install and manage this tool is using **Keentool**, the packa
 
 2.  **Download the script:**
     ```bash
-    curl -L [https://raw.githubusercontent.com/YOUR_USERNAME/keenetic-vnstat/main/traffic_manager.sh](https://raw.githubusercontent.com/YOUR_USERNAME/keenetic-vnstat/main/traffic_manager.sh) -o /opt/bin/traffic_manager.sh
+    curl -L https://raw.githubusercontent.com/YOUR_USERNAME/keenetic-vnstat/main/traffic_manager.sh -o /opt/bin/traffic_manager.sh
     ```
 
 3.  **Make it executable:**
