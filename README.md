@@ -19,6 +19,8 @@ A lightweight, responsive HTML5 dashboard for monitoring network traffic on **Ke
 
 It uses **vnStat** to collect data and generates a static, standalone HTML report with daily, monthly, and hourly statistics. No heavy backend (PHP/Python) required—just a simple shell script and a lightweight web server.
 
+![alt text](https://github.com/mattheweli/Traffic_manager/raw/main/image.png.6b552a7f920526daf9fcbfa1eebe0cd3.png)
+
 ## ✨ Features
 
 * **Responsive UI:** Clean, mobile-friendly interface inspired by modern dashboards.
