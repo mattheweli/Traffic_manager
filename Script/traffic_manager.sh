@@ -52,7 +52,7 @@ cat <<'EOF' > "$HTMLFILE"
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keenetic Traffic Analyzer</title>
+    <title>Keenetic Traffic Monitor</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="../ping/chart.js"></script> 
@@ -200,7 +200,7 @@ cat <<'EOF' > "$HTMLFILE"
     <div class="status-bar">
         <h2 class="header-title">
             <a href="../index.html" class="btn-home" title="Back to Dashboard">🏠</a>
-            <span>Traffic Analyzer</span>
+            <span>Traffic Monitor</span>
         </h2>
         <div class="status-controls">
             <span id="iface_name" style="font-weight:500; color:var(--primary-color); font-size:14px; border:1px solid var(--stroke); padding: 4px 10px; border-radius: 4px;">-</span>
