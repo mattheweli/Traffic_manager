@@ -1,9 +1,9 @@
 #!/bin/sh
 # ==============================================================================
-# TRAFFIC MANAGER v1.0.10 - Timezone Fix Only
+# TRAFFIC MANAGER v1.0.11 - Keenetic UI Refactor
 # Features:
 # - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
-# - REST: Identical to v1.0.9 (Summary Layout Fix).
+# - UI: Dashboard redesigned to match native KeeneticOS styles.
 # ==============================================================================
 
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
@@ -54,93 +54,144 @@ cat <<'EOF' > "$HTMLFILE"
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Keenetic Traffic Analyzer</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="../ping/chart.js"></script> 
     
     <style>
         :root { 
-            --bg: #f4f7f6; --card: #ffffff; --text: #333; --muted: #6c757d; 
-            --border: #e9ecef; --blue: #0d6efd; --green: #198754; --red: #dc3545;
-            --purple: #6f42c1; --orange: #fd7e14;
-            --bar-bg: #e9ecef; --est-color: #666;
-            --shadow: rgba(0,0,0,0.03); 
-        }
-        @media (prefers-color-scheme: dark) { 
-            :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --muted: #a0a0a0; --border: #2c2c2c; --shadow: rgba(0,0,0,0.5); --bar-bg: #333; --est-color: #aaa; } 
+            /* === KEENETIC OFFICIAL LIGHT THEME === */
+            --dashboard-background: #EDEEF0;
+            --background: #fff;
+            --primary-text: #000;
+            --text-gray: #6e6e6e;
+            --primary-color: #0097dc;
+            --primary-color-hover: #007ab3;
+            --stroke: #bdb7b7;
+            --box-shadow-1: 0 5px 20px rgb(0 0 0 / 5%);
+            --dashboard-card-border: transparent;
+            --th-bg: #fafafa;
+            
+            --blue: #0097dc; 
+            --green: #198754; 
+            --purple: #6f42c1; 
+            --orange: #fd7e14;
+            --est-color: #6e6e6e;
         }
         
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; }
+        @media (prefers-color-scheme: dark) { 
+            :root { 
+                /* === KEENETIC OFFICIAL DARK THEME === */
+                --dashboard-background: #1b2434;
+                --background: #243146; 
+                --primary-text: #c2c2c2;
+                --text-gray: #949b9f;
+                --primary-color: #0097dc;
+                --primary-color-hover: #007ab3;
+                --stroke: #4d545f;
+                --box-shadow-1: 0 0 18px 0 #06080b;
+                --dashboard-card-border: #4d545f;
+                --th-bg: #1b2434;
+                
+                --blue: #77bce4;
+                --est-color: #949b9f;
+            } 
+        }
+        
+        body { 
+            font-family: 'Roboto', -apple-system, sans-serif; 
+            background: var(--dashboard-background); 
+            color: var(--primary-text); 
+            padding: 24px; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            -webkit-font-smoothing: antialiased;
+        }
         
         /* HEADER */
         .status-bar { 
-            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; 
-            background: var(--card); padding: 15px 20px; border-radius: 8px; 
-            border: 1px solid var(--border); margin-bottom: 25px; gap: 15px;
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 15px;
         }
-        .header-title { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 15px; font-size: 1.5rem; }
-        .btn-home { text-decoration: none; font-size: 22px; border-right: 1px solid var(--border); padding-right: 15px; transition: transform 0.2s; }
-        .btn-home:hover { transform: scale(1.1); }
+        .header-title { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; font-size: 20px; text-transform: uppercase; }
+        .btn-home { text-decoration: none; font-size: 20px; border-right: 1px solid var(--stroke); padding-right: 12px; transition: opacity 0.2s; color: var(--primary-text); }
+        .btn-home:hover { opacity: 0.7; }
         
-        .status-controls { display: flex; align-items: center; gap: 15px; }
+        .status-controls { display: flex; align-items: center; gap: 16px; }
         
-        .btn-refresh { background-color: var(--blue); color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 13px; font-weight: 600;}
+        .btn-refresh { 
+            background-color: transparent; color: var(--primary-color); border: 1px solid var(--stroke); 
+            padding: 4px 16px; border-radius: 4px; cursor: pointer; text-decoration: none; 
+            font-size: 13px; font-weight: 500; font-family: inherit; transition: all 0.2s;
+        }
+        .btn-refresh:hover { border-color: var(--primary-color); }
 
-        /* SUMMARY - COMPACT LAYOUT */
-        .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 2px 4px var(--shadow); margin-bottom: 25px; display: flex; flex-wrap: wrap; overflow: hidden; }
+        /* SUMMARY CARDS (Keenetic Style) */
+        .summary-card { 
+            background: var(--background); border: 1px solid var(--dashboard-card-border); 
+            border-radius: 8px; box-shadow: var(--box-shadow-1); margin-bottom: 24px; 
+            display: flex; flex-wrap: wrap; overflow: hidden; 
+        }
         
-        /* Reduced min-width to 150px to fit 5 columns in ~800px width */
-        .summary-col { flex: 1; min-width: 150px; padding: 15px; border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; position: relative; }
-        .summary-col:last-child { border-right: none; background: rgba(128,128,128,0.02); }
+        .summary-col { 
+            flex: 1; min-width: 180px; padding: 20px; border-right: 1px solid var(--stroke); 
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start; position: relative; 
+        }
+        .summary-col:last-child { border-right: none; background: rgba(0,0,0,0.01); }
         
-        .sum-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; width: 100%; text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
-        .sum-body { display: flex; gap: 10px; align-items: center; width: 100%; justify-content: center; }
-        .sum-chart { width: 70px; height: 70px; position: relative; flex-shrink: 0; }
-        .sum-data { display: flex; flex-direction: column; gap: 3px; font-size: 12px; min-width: 85px; }
+        .sum-title { font-size: 12px; font-weight: 500; text-transform: uppercase; color: var(--primary-text); margin-bottom: 16px; width: 100%; text-align: left; padding-bottom: 8px; border-bottom: 1px solid var(--stroke); }
+        .sum-body { display: flex; gap: 16px; align-items: center; width: 100%; justify-content: space-between; }
+        .sum-chart { width: 75px; height: 75px; position: relative; flex-shrink: 0; }
+        .sum-data { display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 90px; flex-grow: 1;}
         .stat-row { display: flex; justify-content: space-between; }
-        .stat-est { color: var(--est-color); font-weight: 600; font-style: italic; font-size: 11px; margin-top: 4px; display: flex; justify-content: space-between; border-top: 1px dashed var(--border); padding-top: 2px; }
+        .stat-est { color: var(--est-color); font-weight: 500; font-style: italic; font-size: 12px; margin-top: 4px; display: flex; justify-content: space-between; border-top: 1px dashed var(--stroke); padding-top: 6px; }
         
         .c-rx { color: var(--blue); } .c-tx { color: var(--green); } 
         .c-rx-old { color: var(--purple); } .c-tx-old { color: var(--orange); }
-        .c-tot { font-weight: bold; }
+        .c-tot { font-weight: 700; color: var(--primary-text);}
 
         /* TABLES & CARDS */
-        .card { background: var(--card); border-radius: 8px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 2px 4px var(--shadow); display: flex; flex-direction: column; }
-        .card-head { background: var(--border); padding: 8px 15px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; }
+        .card { 
+            background: var(--background); border-radius: 8px; border: 1px solid var(--dashboard-card-border); 
+            margin-bottom: 24px; box-shadow: var(--box-shadow-1); display: flex; flex-direction: column; overflow: hidden;
+        }
+        .card-head { 
+            padding: 16px 20px; font-size: 14px; font-weight: 500; text-transform: uppercase; 
+            color: var(--primary-text); letter-spacing: 0; border-bottom: 1px solid var(--stroke);
+        }
         
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         
-        table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace; table-layout: fixed; min-width: 500px; }
-        th { text-align: right; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid var(--border); font-weight: 700; white-space: nowrap; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; min-width: 500px; }
+        th { text-align: right; padding: 12px 16px; color: var(--text-gray); border-bottom: 1px solid var(--stroke); font-weight: 500; white-space: nowrap; background: var(--th-bg); font-size: 11px; text-transform: uppercase; }
         
-        th:first-child { text-align: left; width: 95px; }
+        th:first-child { text-align: left; width: 100px; }
         th.th-graph { text-align: left; width: 25%; } 
         
-        td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        td:first-child { text-align: left; font-weight: 600; color: var(--text); }
+        td { padding: 10px 16px; border-bottom: 1px solid var(--stroke); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--primary-text);}
+        td:first-child { text-align: left; font-weight: 400; color: var(--text-gray); }
+        tr:last-child td { border-bottom: none; }
         
-        .bar-container { width: 100%; height: 14px; background: var(--bar-bg); border-radius: 3px; display: flex; overflow: hidden; }
-        .bar-rx { height: 100%; background: var(--blue); opacity: 0.8; }
-        .bar-tx { height: 100%; background: var(--green); opacity: 0.8; }
+        .bar-container { width: 100%; height: 6px; background: var(--stroke); border-radius: 3px; display: flex; overflow: hidden; margin-top: 2px;}
+        .bar-rx { height: 100%; background: var(--blue); opacity: 0.9; }
+        .bar-tx { height: 100%; background: var(--green); opacity: 0.9; }
         
-        .row-est td { color: var(--est-color); font-style: italic; background: rgba(128,128,128,0.05); }
+        .row-est td { color: var(--est-color); font-style: italic; background: rgba(0,0,0,0.02); }
         .row-est .bar-rx { opacity: 0.5; } .row-est .bar-tx { opacity: 0.5; }
 
-        .loading { text-align: center; padding: 50px; color: var(--muted); }
+        .loading { text-align: center; padding: 50px; color: var(--text-gray); font-size: 14px;}
 
         @media(max-width: 900px) { 
-            .summary-col { border-right: none; border-bottom: 1px solid var(--border); } 
+            .summary-col { border-right: none; border-bottom: 1px solid var(--stroke); } 
             .summary-col:last-child { border-bottom: none; } 
         }
         
         @media(max-width: 768px) {
-            body { padding: 10px; }
+            body { padding: 16px; }
             .status-bar { flex-direction: column; text-align: center; } 
-            .header-title { font-size: 1.3rem; justify-content: center; }
+            .header-title { justify-content: center; }
             .status-controls { width: 100%; justify-content: center; }
-            
-            th, td { padding: 6px 4px; font-size: 11px; }
+            th, td { padding: 8px 10px; font-size: 12px; }
             th:first-child { width: 85px; }
             th.th-graph { width: 20%; }
-            .summary-col { min-width: 100%; }
         }
     </style>
 </head>
@@ -149,15 +200,15 @@ cat <<'EOF' > "$HTMLFILE"
     <div class="status-bar">
         <h2 class="header-title">
             <a href="../index.html" class="btn-home" title="Back to Dashboard">🏠</a>
-            <span>📊 Keenetic Traffic Analyzer</span>
+            <span>Traffic Analyzer</span>
         </h2>
         <div class="status-controls">
-            <span id="iface_name" style="font-weight:bold; color:var(--blue); font-size:1.1em">-</span>
-            <a href="javascript:location.reload()" class="btn-refresh">Refresh</a>
+            <span id="iface_name" style="font-weight:500; color:var(--primary-color); font-size:14px; border:1px solid var(--stroke); padding: 4px 10px; border-radius: 4px;">-</span>
+            <a href="javascript:location.reload()" class="btn-refresh">Refresh Data</a>
         </div>
     </div>
 
-    <div id="loading" class="loading">Loading Data...</div>
+    <div id="loading" class="loading">Loading interface data...</div>
 
     <div id="content" style="display:none">
         
@@ -166,9 +217,9 @@ cat <<'EOF' > "$HTMLFILE"
                 <div class="sum-title">Today</div>
                 <div class="sum-body">
                     <div class="sum-data">
-                        <div class="stat-row"><span>Rx:</span> <span class="c-rx" id="s_td_rx">-</span></div>
-                        <div class="stat-row"><span>Tx:</span> <span class="c-tx" id="s_td_tx">-</span></div>
-                        <div class="stat-row"><span>Tot:</span> <span class="c-tot" id="s_td_tot">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Rx:</span> <span class="c-rx" id="s_td_rx">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Tx:</span> <span class="c-tx" id="s_td_tx">-</span></div>
+                        <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_td_tot">-</span></div>
                         <div class="stat-est"><span>Est:</span> <span id="s_td_est">-</span></div>
                     </div>
                     <div class="sum-chart"><canvas id="pie_today"></canvas></div>
@@ -178,9 +229,9 @@ cat <<'EOF' > "$HTMLFILE"
                 <div class="sum-title">Yesterday</div>
                 <div class="sum-body">
                     <div class="sum-data">
-                        <div class="stat-row"><span>Rx:</span> <span class="c-rx-old" id="s_yd_rx">-</span></div>
-                        <div class="stat-row"><span>Tx:</span> <span class="c-tx-old" id="s_yd_tx">-</span></div>
-                        <div class="stat-row"><span>Tot:</span> <span class="c-tot" id="s_yd_tot">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Rx:</span> <span class="c-rx-old" id="s_yd_rx">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Tx:</span> <span class="c-tx-old" id="s_yd_tx">-</span></div>
+                        <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_yd_tot">-</span></div>
                     </div>
                     <div class="sum-chart"><canvas id="pie_yesterday"></canvas></div>
                 </div>
@@ -189,9 +240,9 @@ cat <<'EOF' > "$HTMLFILE"
                 <div class="sum-title" id="lbl_tm">Month</div>
                 <div class="sum-body">
                     <div class="sum-data">
-                        <div class="stat-row"><span>Rx:</span> <span class="c-rx" id="s_tm_rx">-</span></div>
-                        <div class="stat-row"><span>Tx:</span> <span class="c-tx" id="s_tm_tx">-</span></div>
-                        <div class="stat-row"><span>Tot:</span> <span class="c-tot" id="s_tm_tot">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Rx:</span> <span class="c-rx" id="s_tm_rx">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Tx:</span> <span class="c-tx" id="s_tm_tx">-</span></div>
+                        <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_tm_tot">-</span></div>
                         <div class="stat-est"><span>Est:</span> <span id="s_tm_est">-</span></div>
                     </div>
                     <div class="sum-chart"><canvas id="pie_month"></canvas></div>
@@ -201,9 +252,9 @@ cat <<'EOF' > "$HTMLFILE"
                 <div class="sum-title" id="lbl_lm">Last Month</div>
                 <div class="sum-body">
                     <div class="sum-data">
-                        <div class="stat-row"><span>Rx:</span> <span class="c-rx-old" id="s_lm_rx">-</span></div>
-                        <div class="stat-row"><span>Tx:</span> <span class="c-tx-old" id="s_lm_tx">-</span></div>
-                        <div class="stat-row"><span>Tot:</span> <span class="c-tot" id="s_lm_tot">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Rx:</span> <span class="c-rx-old" id="s_lm_rx">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Tx:</span> <span class="c-tx-old" id="s_lm_tx">-</span></div>
+                        <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_lm_tot">-</span></div>
                     </div>
                     <div class="sum-chart"><canvas id="pie_lmonth"></canvas></div>
                 </div>
@@ -212,10 +263,10 @@ cat <<'EOF' > "$HTMLFILE"
                 <div class="sum-title">All Time</div>
                 <div class="sum-body">
                     <div class="sum-data">
-                        <div class="stat-row"><span>Rx:</span> <span class="c-rx" id="s_all_rx">-</span></div>
-                        <div class="stat-row"><span>Tx:</span> <span class="c-tx" id="s_all_tx">-</span></div>
-                        <div class="stat-row"><span>Tot:</span> <span class="c-tot" id="s_all_tot">-</span></div>
-                        <div style="margin-top:10px; font-size:10px; color:var(--muted); text-align:right;">Since:<br><span id="s_created">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Rx:</span> <span class="c-rx" id="s_all_rx">-</span></div>
+                        <div class="stat-row"><span style="color:var(--text-gray)">Tx:</span> <span class="c-tx" id="s_all_tx">-</span></div>
+                        <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_all_tot">-</span></div>
+                        <div style="margin-top:8px; font-size:11px; color:var(--text-gray); text-align:right;">Since:<br><span id="s_created">-</span></div>
                     </div>
                 </div>
             </div>
@@ -225,7 +276,7 @@ cat <<'EOF' > "$HTMLFILE"
             <div class="card-head">Last 24 Hours</div>
             <div class="table-responsive">
                 <table id="tab_hour">
-                    <thead><tr><th>Hour</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg</th><th class="th-graph">Graph</th></tr></thead>
+                    <thead><tr><th>Hour</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -235,7 +286,7 @@ cat <<'EOF' > "$HTMLFILE"
             <div class="card-head">Daily History</div>
             <div class="table-responsive">
                 <table id="tab_day">
-                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg</th><th class="th-graph">Graph</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -245,7 +296,7 @@ cat <<'EOF' > "$HTMLFILE"
             <div class="card-head">Monthly History</div>
             <div class="table-responsive">
                 <table id="tab_mon">
-                    <thead><tr><th>Month</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg</th><th class="th-graph">Graph</th></tr></thead>
+                    <thead><tr><th>Month</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -255,17 +306,17 @@ cat <<'EOF' > "$HTMLFILE"
             <div class="card-head">Yearly History</div>
             <div class="table-responsive">
                 <table id="tab_year">
-                    <thead><tr><th>Year</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg</th><th class="th-graph">Graph</th></tr></thead>
+                    <thead><tr><th>Year</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-head">📊 Top 10 Days</div>
+            <div class="card-head">Top 10 Days</div>
             <div class="table-responsive">
                 <table id="tab_top">
-                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Graph</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -279,9 +330,9 @@ cat <<'EOF' > "$HTMLFILE"
     
     <script>
         // PRESENT COLORS (Blue / Green)
-        const COL_RX = 'rgba(13, 110, 253, 0.85)';
+        const COL_RX = 'rgba(0, 151, 220, 0.85)';
         const COL_TX = 'rgba(25, 135, 84, 0.85)';
-        const COL_RX_A = 'rgba(13, 110, 253, 0.15)'; // Ghost
+        const COL_RX_A = 'rgba(0, 151, 220, 0.15)'; // Ghost
         const COL_TX_A = 'rgba(25, 135, 84, 0.15)';
 
         // PAST COLORS (Purple / Orange)
@@ -290,7 +341,7 @@ cat <<'EOF' > "$HTMLFILE"
 
         function fmt(bytes) {
             if (!bytes) return '0 B';
-            const k = 1024; const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+            const k = 1024; const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
@@ -380,7 +431,7 @@ cat <<'EOF' > "$HTMLFILE"
 
         window.onload = function() {
             if(typeof window.TRAFFIC_RAW === 'undefined' || window.TRAFFIC_RAW.error) {
-                document.getElementById('loading').innerText = "Error: No Data."; return;
+                document.getElementById('loading').innerText = "Error: No data available from vnStat."; return;
             }
             const data = window.TRAFFIC_RAW;
             const iface = data.interfaces[0];
@@ -458,10 +509,10 @@ cat <<'EOF' > "$HTMLFILE"
             const renderTable = (arr, type, tabId, limit, showEst, sortDesc) => {
                 let data = arr.slice();
                 if(sortDesc) {
-                   data.sort((a,b)=>(b.rx+b.tx)-(a.rx+a.tx));
-                   data = data.slice(0, limit);
+                    data.sort((a,b)=>(b.rx+b.tx)-(a.rx+a.tx));
+                    data = data.slice(0, limit);
                 } else {
-                   data = data.slice(-limit).reverse();
+                    data = data.slice(-limit).reverse();
                 }
                 
                 const tbody = document.querySelector('#'+tabId+' tbody');
