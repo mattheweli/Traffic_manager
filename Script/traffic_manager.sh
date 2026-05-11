@@ -51,7 +51,7 @@ for IFACE in $IFACES; do
         echo "window.TRAFFIC_$IFACE = { error: true };" > "$DATAFILE"
     fi
     
-    SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script>\n    "
+    SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script> "
     TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}')\">${IFACE}</button> "
 done
 
