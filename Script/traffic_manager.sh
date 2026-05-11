@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TRAFFIC MANAGER v1.1.1 - Keenetic UI Refactor
+# TRAFFIC MANAGER v1.1.2 - Keenetic UI Refactor
 # Features:
 # - OPTIMIZATION: HTML generated ONLY on first run or forced. Cache busting via JS.
 # - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
@@ -613,4 +613,9 @@ cat <<EOF > "$HTMLFILE"
 </body>
 </html>
 EOF
+
+# --- 4. GENERATE JS INDEX FOR DASHBOARD ---
+INDEX_FILE="${OUTDIR}/vnstat_index.js"
+echo "window.VNSTAT_INTERFACES = \"$IFACES\";" > "$INDEX_FILE"
+
 fi
