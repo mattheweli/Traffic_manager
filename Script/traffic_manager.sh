@@ -52,7 +52,7 @@ for IFACE in $IFACES; do
     fi
     
     SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script>\n    "
-    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}')\">${IFACE}</button>\n            "
+    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}')\">${IFACE}</button> "
 done
 
 # --- 3. GENERATE HTML ---
