@@ -1,9 +1,11 @@
 #!/bin/sh
 # ==============================================================================
-# TRAFFIC MANAGER v1.0.11 - Keenetic UI Refactor
+# TRAFFIC MANAGER v1.1.1 - Keenetic UI Refactor
 # Features:
+# - OPTIMIZATION: HTML generated ONLY on first run or forced. Cache busting via JS.
 # - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
 # - UI: Dashboard redesigned to match native KeeneticOS styles.
+# - NEW: Multi-Interface support via single dashboard with tabs.
 # ==============================================================================
 
 PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
@@ -18,35 +20,46 @@ fi
 VNSTAT="/opt/bin/vnstat"
 BASE_DIR="/opt/var/www"
 OUTDIR="${2:-$BASE_DIR/vnstat}"
-IFACE="${1:-}"
+IFACES="${1:-}"
 
 # --- 1. CONFIGURATION & CHECKS ---
-if [ -z "$IFACE" ]; then
-  IFACE=$($VNSTAT --dblist 2>/dev/null | grep -v "Database" | grep -v "^$" | head -n 1 | awk '{print $1}')
+if [ -z "$IFACES" ]; then
+  IFACES=$($VNSTAT --dblist 2>/dev/null | grep -v "Database" | grep -v "^$" | head -n 1 | awk '{print $1}')
 fi
-[ -z "$IFACE" ] && { echo "ERROR: No interface found."; exit 1; }
+[ -z "$IFACES" ] && { echo "ERROR: No interfaces found."; exit 1; }
 
 mkdir -p "$OUTDIR"
-HTMLFILE="${OUTDIR}/${IFACE}-vnstat.html"
-DATAFILE="${OUTDIR}/vnstat_data.js"
+HTMLFILE="${OUTDIR}/index.html"
+
+SCRIPT_INCLUDES=""
+TABS_HTML=""
+FIRST_IFACE=""
 
 # --- 2. UPDATE DB & EXPORT JSON ---
-$VNSTAT -i "$IFACE" -u >/dev/null 2>&1
+for IFACE in $IFACES; do
+    [ -z "$FIRST_IFACE" ] && FIRST_IFACE="$IFACE"
+    
+    $VNSTAT -i "$IFACE" -u >/dev/null 2>&1
+    
+    echo "Exporting traffic data for $IFACE..."
+    JSON_DATA=$($VNSTAT -i "$IFACE" --json)
+    DATAFILE="${OUTDIR}/${IFACE}_data.js"
 
-echo "Exporting traffic data for $IFACE..."
-JSON_DATA=$($VNSTAT -i "$IFACE" --json)
-
-if [ -n "$JSON_DATA" ]; then
-    echo "window.TRAFFIC_RAW = $JSON_DATA;" > "$DATAFILE"
-else
-    echo "window.TRAFFIC_RAW = { error: true };" > "$DATAFILE"
-fi
+    if [ -n "$JSON_DATA" ]; then
+        echo "window.TRAFFIC_$IFACE = $JSON_DATA;" > "$DATAFILE"
+    else
+        echo "window.TRAFFIC_$IFACE = { error: true };" > "$DATAFILE"
+    fi
+    
+    SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script>\n    "
+    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}')\">${IFACE}</button>\n            "
+done
 
 # --- 3. GENERATE HTML ---
 if [ ! -f "$HTMLFILE" ] || [ "$1" = "force" ]; then
     echo "Generating HTML Dashboard..."
     
-cat <<'EOF' > "$HTMLFILE"
+cat <<EOF > "$HTMLFILE"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -109,7 +122,7 @@ cat <<'EOF' > "$HTMLFILE"
         
         /* HEADER */
         .status-bar { 
-            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 15px;
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 15px;
         }
         .header-title { margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; font-size: 20px; text-transform: uppercase; }
         .btn-home { text-decoration: none; font-size: 20px; border-right: 1px solid var(--stroke); padding-right: 12px; transition: opacity 0.2s; color: var(--primary-text); }
@@ -123,6 +136,12 @@ cat <<'EOF' > "$HTMLFILE"
             font-size: 13px; font-weight: 500; font-family: inherit; transition: all 0.2s;
         }
         .btn-refresh:hover { border-color: var(--primary-color); }
+
+        /* TABS */
+        .tabs-container { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--stroke); padding-bottom: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .tab-btn { background: var(--background); border: 1px solid var(--stroke); padding: 8px 20px; border-radius: 6px; color: var(--primary-text); cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
+        .tab-btn:hover { border-color: var(--primary-color); }
+        .tab-btn.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
 
         /* SUMMARY CARDS (Keenetic Style) */
         .summary-card { 
@@ -206,6 +225,10 @@ cat <<'EOF' > "$HTMLFILE"
             <span id="iface_name" style="font-weight:500; color:var(--primary-color); font-size:14px; border:1px solid var(--stroke); padding: 4px 10px; border-radius: 4px;">-</span>
             <a href="javascript:location.reload()" class="btn-refresh">Refresh Data</a>
         </div>
+    </div>
+    
+    <div class="tabs-container" id="tabs_container">
+        $TABS_HTML
     </div>
 
     <div id="loading" class="loading">Loading interface data...</div>
@@ -324,9 +347,7 @@ cat <<'EOF' > "$HTMLFILE"
 
     </div>
 
-    <script>
-        document.write('<script src="vnstat_data.js?v=' + Date.now() + '"><\/script>');
-    </script>
+    $SCRIPT_INCLUDES
     
     <script>
         // PRESENT COLORS (Blue / Green)
@@ -338,6 +359,8 @@ cat <<'EOF' > "$HTMLFILE"
         // PAST COLORS (Purple / Orange)
         const COL_RX_OLD = 'rgba(111, 66, 193, 0.85)';
         const COL_TX_OLD = 'rgba(253, 126, 20, 0.85)';
+
+        window._chartInstances = [];
 
         function fmt(bytes) {
             if (!bytes) return '0 B';
@@ -359,12 +382,12 @@ cat <<'EOF' > "$HTMLFILE"
             const D = (d.date) ? d.date : d; 
             const mNames = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             
-            if(type=='h') return `${String(h).padStart(2,'0')}:00`;
-            if(type=='d') return `${String(D.day).padStart(2,'0')}/${String(D.month).padStart(2,'0')}`;
-            if(type=='m') return `${mNames[D.month]} '${String(D.year).substr(2)}`;
+            if(type=='h') return \`\${String(h).padStart(2,'0')}:00\`;
+            if(type=='d') return \`\${String(D.day).padStart(2,'0')}/\${String(D.month).padStart(2,'0')}\`;
+            if(type=='m') return \`\${mNames[D.month]} '\${String(D.year).substr(2)}\`;
             if(type=='mn') return mNames[D.month];
             if(type=='y') return D.year;
-            return `${String(D.day).padStart(2,'0')}/${String(D.month).padStart(2,'0')}/${D.year}`;
+            return \`\${String(D.day).padStart(2,'0')}/\${String(D.month).padStart(2,'0')}/\${D.year}\`;
         }
 
         function calcRate(bytes, dObj, type, dbDate) {
@@ -429,11 +452,18 @@ cat <<'EOF' > "$HTMLFILE"
             };
         }
 
-        window.onload = function() {
-            if(typeof window.TRAFFIC_RAW === 'undefined' || window.TRAFFIC_RAW.error) {
-                document.getElementById('loading').innerText = "Error: No data available from vnStat."; return;
+        function renderData(ifaceName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab_' + ifaceName).classList.add('active');
+
+            const data = window['TRAFFIC_' + ifaceName];
+            if(!data || data.error) {
+                document.getElementById('content').style.display = 'none';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').innerText = "Error: No data available from vnStat for " + ifaceName; 
+                return;
             }
-            const data = window.TRAFFIC_RAW;
+            
             const iface = data.interfaces[0];
             const tr = iface.traffic;
 
@@ -475,7 +505,14 @@ cat <<'EOF' > "$HTMLFILE"
             const remMon = getEst(tmon, 'm', dbTime);
             
             if(remDay) document.getElementById('s_td_est').innerText = fmt( (today.rx+remDay.rx) + (today.tx+remDay.tx) );
+            else document.getElementById('s_td_est').innerText = '-';
+            
             if(remMon) document.getElementById('s_tm_est').innerText = fmt( (tmon.rx+remMon.rx) + (tmon.tx+remMon.tx) );
+            else document.getElementById('s_tm_est').innerText = '-';
+            
+            // Clean up charts before rendering
+            window._chartInstances.forEach(c => c.destroy());
+            window._chartInstances = [];
 
             const mkPie = (id, cur, rem, isPast) => {
                 let colRx = isPast ? COL_RX_OLD : COL_RX;
@@ -488,7 +525,7 @@ cat <<'EOF' > "$HTMLFILE"
                     d.push(rem.rx, rem.tx);
                     c.push(COL_RX_A, COL_TX_A);
                 }
-                new Chart(document.getElementById(id), {
+                const chart = new Chart(document.getElementById(id), {
                     type: 'doughnut',
                     data: { labels:[], datasets:[{data:d, backgroundColor:c, borderWidth:0}] },
                     options: { 
@@ -498,6 +535,7 @@ cat <<'EOF' > "$HTMLFILE"
                         maintainAspectRatio:false 
                     }
                 });
+                window._chartInstances.push(chart);
             };
             
             mkPie('pie_today', today, remDay, false); 
@@ -516,6 +554,8 @@ cat <<'EOF' > "$HTMLFILE"
                 }
                 
                 const tbody = document.querySelector('#'+tabId+' tbody');
+                tbody.innerHTML = ''; // SVUOTA LA TABELLA PER IL CAMBIO TAB
+                
                 let maxVal = 0;
                 data.forEach(d => { if((d.rx+d.tx) > maxVal) maxVal = (d.rx+d.tx); });
                 
@@ -540,19 +580,19 @@ cat <<'EOF' > "$HTMLFILE"
                     
                     let dateStr = isEst ? "estimated" : pDate(x, type);
                     
-                    r.innerHTML = `
-                        <td>${dateStr}</td>
-                        <td class="c-rx">${fmt(x.rx)}</td>
-                        <td class="c-tx">${fmt(x.tx)}</td>
-                        <td class="c-tot">${fmt(tot)}</td>
-                        <td>${isEst ? '-' : calcRate(tot, x, type, dbTime)}</td>
+                    r.innerHTML = \`
+                        <td>\${dateStr}</td>
+                        <td class="c-rx">\${fmt(x.rx)}</td>
+                        <td class="c-tx">\${fmt(x.tx)}</td>
+                        <td class="c-tot">\${fmt(tot)}</td>
+                        <td>\${isEst ? '-' : calcRate(tot, x, type, dbTime)}</td>
                         <td class="td-graph">
                             <div class="bar-container">
-                                <div class="bar-rx" style="width:${pctRx}%"></div>
-                                <div class="bar-tx" style="width:${pctTx}%"></div>
+                                <div class="bar-rx" style="width:\${pctRx}%"></div>
+                                <div class="bar-tx" style="width:\${pctTx}%"></div>
                             </div>
                         </td>
-                    `;
+                    \`;
                     tbody.appendChild(r);
                 });
             };
@@ -562,6 +602,12 @@ cat <<'EOF' > "$HTMLFILE"
             renderTable(tr.month, 'm', 'tab_mon', 12, true, false);
             renderTable(tr.year, 'y', 'tab_year', 10, true, false);
             renderTable(tr.day, 'd', 'tab_top', 10, false, true);
+        }
+
+        window.onload = function() {
+            setTimeout(function() {
+                renderData('$FIRST_IFACE');
+            }, 100);
         };
     </script>
 </body>
