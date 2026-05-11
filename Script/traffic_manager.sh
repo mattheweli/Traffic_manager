@@ -1,6 +1,6 @@
 #!/bin/sh
 # ==============================================================================
-# TRAFFIC MANAGER v1.1.2 - Keenetic UI Refactor
+# TRAFFIC MANAGER v1.1.3 - Keenetic UI Refactor
 # Features:
 # - OPTIMIZATION: HTML generated ONLY on first run or forced. Cache busting via JS.
 # - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
