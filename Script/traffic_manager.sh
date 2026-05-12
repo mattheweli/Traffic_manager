@@ -1,7 +1,9 @@
 #!/bin/sh
 # ==============================================================================
-# TRAFFIC MANAGER v1.1.3 - Keenetic UI Refactor
+# TRAFFIC MANAGER v1.1.4 - Keenetic UI Refactor
 # Features:
+# - FEAT: Added support for custom interface aliases (e.g., WAN, LAN) via Keentool.
+# - FIX: Removed literal '\n' text artifacts from HTML generation (tabs and scripts).
 # - OPTIMIZATION: HTML generated ONLY on first run or forced. Cache busting via JS.
 # - FIX: Forces system Timezone to prevent 1-hour offset in hourly stats.
 # - UI: Dashboard redesigned to match native KeeneticOS styles.
@@ -22,6 +24,14 @@ BASE_DIR="/opt/var/www"
 OUTDIR="${2:-$BASE_DIR/vnstat}"
 IFACES="${1:-}"
 
+# --- NEW: LOAD ALIASES ---
+ALIASES=""
+DASH_CONF="/opt/etc/keentool/dashboard.conf"
+if [ -f "$DASH_CONF" ]; then
+    # Usa grep per estrarre il valore pulito
+    ALIASES=$(grep "^VNSTAT_ALIASES=" "$DASH_CONF" | cut -d'"' -f2)
+fi
+
 # --- 1. CONFIGURATION & CHECKS ---
 if [ -z "$IFACES" ]; then
   IFACES=$($VNSTAT --dblist 2>/dev/null | grep -v "Database" | grep -v "^$" | head -n 1 | awk '{print $1}')
@@ -36,6 +46,10 @@ TABS_HTML=""
 FIRST_IFACE=""
 
 # --- 2. UPDATE DB & EXPORT JSON ---
+# Create an array of aliases to use in the loop
+set -- $ALIASES
+IDX=1
+
 for IFACE in $IFACES; do
     [ -z "$FIRST_IFACE" ] && FIRST_IFACE="$IFACE"
     
@@ -51,8 +65,14 @@ for IFACE in $IFACES; do
         echo "window.TRAFFIC_$IFACE = { error: true };" > "$DATAFILE"
     fi
     
+    # Get the corresponding alias; if missing, fall back to the interface name
+    eval ALIAS_NAME=\${$IDX}
+    [ -z "$ALIAS_NAME" ] && ALIAS_NAME="$IFACE"
+    
     SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script> "
-    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}')\">${IFACE}</button> "
+    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}', '${ALIAS_NAME}')\">${ALIAS_NAME}</button> "
+    
+    IDX=$((IDX + 1))
 done
 
 # --- 3. GENERATE HTML ---
@@ -452,7 +472,7 @@ cat <<EOF > "$HTMLFILE"
             };
         }
 
-        function renderData(ifaceName) {
+        function renderData(ifaceName, aliasName) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('tab_' + ifaceName).classList.add('active');
 
@@ -475,7 +495,7 @@ cat <<EOF > "$HTMLFILE"
 
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').style.display = 'block';
-            document.getElementById('iface_name').innerText = iface.name;
+            document.getElementById('iface_name').innerText = aliasName ? aliasName : (iface.name || iface.id);
             if(iface.created && iface.created.date) document.getElementById('s_created').innerText = pDate(iface.created.date, 'f');
 
             // --- 1. SUMMARY ---
@@ -605,8 +625,9 @@ cat <<EOF > "$HTMLFILE"
         }
 
         window.onload = function() {
+            const firstAlias = "$ALIASES".split(" ")[0] || '$FIRST_IFACE';
             setTimeout(function() {
-                renderData('$FIRST_IFACE');
+                renderData('$FIRST_IFACE', firstAlias);
             }, 100);
         };
     </script>
