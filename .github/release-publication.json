@@ -1,0 +1,22 @@
+{
+  "repository": "mattheweli/Traffic_manager",
+  "release_id": 422047945,
+  "tag": "v2.0.1",
+  "target": "bc1c4fc95ecd61f1de0fa219b3136a9ee7a0ec14",
+  "validated_run": 39984618828,
+  "pr": 2,
+  "operation_ref": "refs/heads/operations/publish-readmes-20261023",
+  "assets": {
+    "Traffic_manager-2.0.1-sources.tar.gz": {
+      "size": 78692,
+      "digest": "sha256:8651995b5ae67053db88255d3acca34259e15df4f96d6acdd8804f8ca60eeceb"
+    },
+    "Traffic_manager-2.0.1-sources.tar.gz.sha256": {
+      "size": 103,
+      "digest": "sha256:dfef61eeef56320e371b62d725730bdf5ac2fd24671c3c5be49b36cf20105c70"
+    }
+  },
+  "merge": true,
+  "base_commit": "ba8f435d096c08933706c779a22981b3ae2b59bb",
+  "source_tree": "4379a19f2064cad84ac0dd2e65425eef3f81afd1"
+}
