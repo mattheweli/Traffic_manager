@@ -1,103 +1,22 @@
-<div align="center">
+# Traffic_manager 2.0.0
 
-### ❤️ Support the Project
-If you found this project helpful, consider buying me a coffee!
+Stable component sources for the KeenTool suite. Release date: 2026-10-22.
 
-<a href="https://paypal.me/MatteoRosettani">
-  <img src="https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal" />
-</a>
+## Installation and updates
 
-<a href="https://revolut.me/matthew_eli">
-  <img src="https://img.shields.io/badge/Revolut-black?style=for-the-badge&logo=revolut&logoColor=white" alt="Donate with Revolut" />
-</a>
+Install the complete KeenTool 2.0.0 release from https://github.com/mattheweli/KeenTool/releases. The shared runtime, assets, authentication and security broker are required. Do not copy this component alone over an older installation.
 
-</div>
+For an extracted complete package, use /opt/bin/bash ./install.sh --plan and follow docs/INSTALL.md. Existing public-source and local-alpha installations use --mode upgrade. New installations require --interface and reviewed web/logging ownership options. Existing databases, configuration, credentials and upgrade schedules are preserved.
 
-# 📊 Keenetic Traffic Manager (VnStat Dashboard)
+## Changes
 
-A lightweight, responsive HTML5 dashboard for monitoring network traffic on **Keenetic Routers** running Entware. 
+- Stable 2.0.0 responsive multi-interface dashboard with aligned table headers/body, full dates in Top 10 Days, paired traffic doughnuts/values and common theme/refresh controls.
+- Resolve interface selection from explicit arguments/existing configuration instead of publishing Unknown; validate vnStat JSON and retain the last good export when vnStat fails. Missing data is distinguished from a disabled daemon.
+- Preserve vnStat databases, custom interface jobs and existing exports. Uniform grouped values/decimal separators in quotas, rates, totals and tooltips.
+- External dashboard settings survive updates. Full-width layouts, shared navigation and version/copyright footer replace the alpha banner.
 
-It uses **vnStat** to collect data and generates a static, standalone HTML report with daily, monthly, and hourly statistics. No heavy backend (PHP/Python) required—just a simple shell script and a lightweight web server.
+## Release baseline
 
-![alt text](https://github.com/mattheweli/Traffic_manager/raw/main/image.png.6b552a7f920526daf9fcbfa1eebe0cd3.png)
+Public main commit: 1c5148ef576b2c97fb22f81471a0ace3eae6ea6f. No tags or GitHub Releases existed at preparation time. Stable tag: v2.0.0.
 
-## ✨ Features
-
-* **Responsive UI:** Clean, mobile-friendly interface inspired by modern dashboards.
-* **Comprehensive Stats:** View Hourly (24h), Daily (30d), Monthly, and Yearly traffic.
-* **Visual Graphs:** CSS-based bar charts embedded directly in the table (no heavy JS libraries).
-* **Timezone Aware:** Automatically detects and applies the correct system Timezone to avoid offsets in hourly stats.
-* **Estimates:** Provides traffic estimation for the current day and month.
-* **Zero Dependencies:** The dashboard is a single HTML file + one JS data file.
-
-## 🛠️ Prerequisites
-
-* **Keenetic Router** with Entware installed.
-* **Web Server:** `lighttpd` (recommended) or Nginx running on the router.
-* **Packages:**
-    * `vnstat` (specifically version 2.x, package `vnstat2`)
-    * `bash`
-
-## 🚀 Installation
-
-### Method 1: Via Keentool (Recommended)
-The easiest way to install and manage this tool is using **Keentool**, the package manager for Keenetic scripts.
-
-1.  Run Keentool in your terminal.
-2.  Select **Traffic Manager** from the menu.
-3.  Keentool will handle dependency installation (`vnstat2`) and Cron setup automatically.
-
-### Method 2: Manual Installation
-
-1.  **Install Dependencies:**
-    ```bash
-    opkg update
-    opkg install vnstat2 bash
-    ```
-    *Note: Ensure `vnstatd` service is running (`/opt/etc/init.d/S26vnstatd start`).*
-
-2.  **Download the script:**
-    ```bash
-    curl -L https://raw.githubusercontent.com/YOUR_USERNAME/keenetic-vnstat/main/traffic_manager.sh -o /opt/bin/traffic_manager.sh
-    ```
-
-3.  **Make it executable:**
-    ```bash
-    chmod +x /opt/bin/traffic_manager.sh
-    ```
-
-## ⚙️ Usage
-
-### Manual Run
-You can run the script manually to generate the dashboard immediately:
-
-```bash
-/opt/bin/traffic_manager.sh [INTERFACE]
-```
-
-### Interface: (Optional) e.g., pppoe0, eth3. If omitted, the script auto-detects the active WAN interface.
-
-### Output: The script generates /opt/var/www/vnstat/index.html and vnstat_data.js.
-
-## Automation (Cron)
-
-To keep the dashboard updated, add a job to your crontab (e.g., update every 10 minutes).
-
-1. Edit crontab:
-```bash
-nano /opt/etc/crontab
-```
-
-2. Add the line:
-```bash
-*/10 * * * * root /opt/bin/traffic_manager.sh pppoe0 >/dev/null 2>&1
-```
-
-## 🌐 Accessing the Dashboard
-Once generated, access the dashboard via your router's IP and the port configured in your web server (usually port 81 if set up via Keentool).
-
-Example: http://192.168.1.1:81/vnstat/
-
-
-## 📄 License
-This project is open source. Feel free to modify and distribute.
+See the complete package's CHANGELOG.md, VERSIONS.md, SECURITY.md and docs/VALIDATION.md for coordinated versions, installation, known feed limitations and test evidence. Development history is archived in docs/history/.

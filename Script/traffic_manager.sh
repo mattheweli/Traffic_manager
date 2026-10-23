@@ -1,4 +1,7 @@
-#!/bin/sh
+#!/opt/bin/bash
+# TRAFFIC MANAGER v2.0.0
+# Release: 2026-10-22 | Stable. See CHANGELOG.md for release details.
+
 # ==============================================================================
 # TRAFFIC MANAGER v1.1.4 - Keenetic UI Refactor
 # Features:
@@ -10,7 +13,11 @@
 # - NEW: Multi-Interface support via single dashboard with tabs.
 # ==============================================================================
 
-PATH=/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin
+PATH=${KT_PATH:-/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin}
+# Traffic Manager 2.0.0
+. "${KT_COMMON:-/opt/lib/keentool/common.sh}" || exit 1
+kt_init traffic-manager || exit $?
+
 
 # --- FORCE TIMEZONE ---
 if [ -f /etc/TZ ]; then 
@@ -19,16 +26,23 @@ elif [ -f /opt/etc/TZ ]; then
     export TZ=$(cat /opt/etc/TZ)
 fi
 
-VNSTAT="/opt/bin/vnstat"
+VNSTAT="${KT_VNSTAT:-/opt/bin/vnstat}"
 BASE_DIR="/opt/var/www"
 OUTDIR="${2:-$BASE_DIR/vnstat}"
-IFACES="${1:-}"
+FORCE_HTML=false
+IFACES=""; POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in force|--force) FORCE_HTML=true ;; *) POSITIONAL+=("$arg") ;; esac
+done
+IFACES="${POSITIONAL[0]:-}"; OUTDIR="${POSITIONAL[1]:-${KT_TRAFFIC_WEB:-$BASE_DIR/vnstat}}"
+
 
 # --- NEW: LOAD ALIASES ---
 ALIASES=""
 DASH_CONF="/opt/etc/keentool/dashboard.conf"
 if [ -f "$DASH_CONF" ]; then
-    # Usa grep per estrarre il valore pulito
+    # Extract the configuration value.
+    MONTHLY_QUOTA_GB=$(sed -n 's/^MONTHLY_QUOTA_GB="\([0-9.]*\)"/\1/p' "$DASH_CONF")
     ALIASES=$(grep "^VNSTAT_ALIASES=" "$DASH_CONF" | cut -d'"' -f2)
 fi
 
@@ -39,9 +53,14 @@ fi
 [ -z "$IFACES" ] && { echo "ERROR: No interfaces found."; exit 1; }
 
 mkdir -p "$OUTDIR"
+if [ ! -s "$OUTDIR/chart.js" ]; then
+    if [ -s "$BASE_DIR/ping/chart.js" ]; then cp "$BASE_DIR/ping/chart.js" "$OUTDIR/chart.js"
+    else kt_download 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js' "$OUTDIR/chart.js" || { echo 'Chart.js unavailable' >&2; exit 1; }; fi
+fi
+chmod 644 "$OUTDIR/chart.js" || exit 1
 HTMLFILE="${OUTDIR}/index.html"
 
-SCRIPT_INCLUDES=""
+SCRIPT_INCLUDES="<script>window.MONTHLY_QUOTA_GB=${MONTHLY_QUOTA_GB:-0};</script>"
 TABS_HTML=""
 FIRST_IFACE=""
 
@@ -50,45 +69,58 @@ FIRST_IFACE=""
 set -- $ALIASES
 IDX=1
 
+js_escape() { sed 's/\\/\\\\/g; s/"/\\"/g; s/</\\u003c/g; s/>/\\u003e/g'; }
 for IFACE in $IFACES; do
+    [[ "$IFACE" =~ ^[a-zA-Z0-9_.:-]+$ ]] || { echo "Invalid interface: $IFACE" >&2; exit 1; }
+
     [ -z "$FIRST_IFACE" ] && FIRST_IFACE="$IFACE"
     
     $VNSTAT -i "$IFACE" -u >/dev/null 2>&1
     
     echo "Exporting traffic data for $IFACE..."
-    JSON_DATA=$($VNSTAT -i "$IFACE" --json)
+    JSON_DATA=$($VNSTAT -i "$IFACE" --json);JSON_RC=$?
     DATAFILE="${OUTDIR}/${IFACE}_data.js"
 
-    if [ -n "$JSON_DATA" ]; then
-        echo "window.TRAFFIC_$IFACE = $JSON_DATA;" > "$DATAFILE"
+    if [ "$JSON_RC" = 0 ] && [ -n "$JSON_DATA" ] && kt_json_valid "$JSON_DATA"; then
+        TMP_DATA=$(mktemp "$OUTDIR/.traffic.XXXXXX") || exit 1
+        printf 'window.TRAFFIC_DATA = window.TRAFFIC_DATA || {}; window.TRAFFIC_DATA["%s"] = %s;\n' "$IFACE" "$JSON_DATA" > "$TMP_DATA"
+        chmod 644 "$TMP_DATA" || { rm -f "$TMP_DATA"; exit 1; }
+        mv "$TMP_DATA" "$DATAFILE"
     else
-        echo "window.TRAFFIC_$IFACE = { error: true };" > "$DATAFILE"
+        echo "WARN: vnStat export failed for $IFACE; retaining last good data" >&2
+        if [ ! -f "$DATAFILE" ]; then printf 'window.TRAFFIC_DATA=window.TRAFFIC_DATA||{};window.TRAFFIC_DATA["%s"]={error:true};\n' "$IFACE" > "$DATAFILE"; fi
     fi
     
+    [ ! -f "$DATAFILE" ] || chmod 644 "$DATAFILE" || exit 1
+
     # Get the corresponding alias; if missing, fall back to the interface name
-    eval ALIAS_NAME=\${$IDX}
+    ALIAS_NAME="${!IDX}"
     [ -z "$ALIAS_NAME" ] && ALIAS_NAME="$IFACE"
     
     SCRIPT_INCLUDES="${SCRIPT_INCLUDES}<script>document.write('<script src=\"${IFACE}_data.js?v=' + Date.now() + '\"><' + '/script>');</script> "
-    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" onclick=\"renderData('${IFACE}', '${ALIAS_NAME}')\">${ALIAS_NAME}</button> "
+    ALIAS_JS=$(printf '%s' "$ALIAS_NAME" | js_escape)
+    TABS_HTML="${TABS_HTML}<button class=\"tab-btn\" id=\"tab_${IFACE}\" data-iface=\"${IFACE}\"></button> "
+    SCRIPT_INCLUDES="$SCRIPT_INCLUDES<script>window.TRAFFIC_ALIASES=window.TRAFFIC_ALIASES||{};window.TRAFFIC_ALIASES[\"$IFACE\"]=\"$ALIAS_JS\";</script> "
     
     IDX=$((IDX + 1))
 done
 
 # --- 3. GENERATE HTML ---
-if [ ! -f "$HTMLFILE" ] || [ "$1" = "force" ]; then
+SIGNATURE=$(printf '%s|%s' "$IFACES" "$ALIASES|${MONTHLY_QUOTA_GB:-0}|2.0.0" | sha256sum)
+if [ ! -f "$HTMLFILE" ] || [ "$FORCE_HTML" = true ] || [ "$(cat "$OUTDIR/.signature" 2>/dev/null)" != "$SIGNATURE" ]; then
     echo "Generating HTML Dashboard..."
     
-cat <<EOF > "$HTMLFILE"
+HTML_TMP=$(mktemp "$OUTDIR/.html.XXXXXX") || exit 1
+cat <<EOF > "$HTML_TMP"
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Keenetic Traffic Monitor</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="/assets/keentool.svg?v=1.0.0">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <script src="../ping/chart.js"></script> 
+    <script src="chart.js"></script> 
     
     <style>
         :root { 
@@ -232,9 +264,19 @@ cat <<EOF > "$HTMLFILE"
             th:first-child { width: 85px; }
             th.th-graph { width: 20%; }
         }
+
+        /* Match numeric heading alignment to its data cells; override the shared theme. */
+        .kt-ui[data-kt-page="traffic"] th.th-number { text-align: right; }
+        .kt-ui[data-kt-page="traffic"] th:first-child,
+        .kt-ui[data-kt-page="traffic"] td:first-child,
+        .kt-ui[data-kt-page="traffic"] th.th-graph,
+        .kt-ui[data-kt-page="traffic"] td.td-graph { text-align: left; }
     </style>
+<script src="/assets/keentool-format.js?v=1.0.0"></script>
+<link rel="stylesheet" href="/assets/keentool-ui.css?v=1.0.0">
+<script defer src="/assets/keentool-ui.js?v=1.0.0"></script>
 </head>
-<body>
+<body class="kt-ui" data-kt-page="traffic"><div id="data_freshness" style="padding:8px;text-align:center"></div><div id="data_quota" style="padding:4px;text-align:center"></div>
 
     <div class="status-bar">
         <h2 class="header-title">
@@ -242,8 +284,8 @@ cat <<EOF > "$HTMLFILE"
             <span>Traffic Monitor</span>
         </h2>
         <div class="status-controls">
+            <label>Interface <select id="traffic_interface" class="refresh-select" aria-label="Traffic interface" onchange="renderData(this.value)"></select></label>
             <span id="iface_name" style="font-weight:500; color:var(--primary-color); font-size:14px; border:1px solid var(--stroke); padding: 4px 10px; border-radius: 4px;">-</span>
-            <a href="javascript:location.reload()" class="btn-refresh">Refresh Data</a>
         </div>
     </div>
     
@@ -255,6 +297,7 @@ cat <<EOF > "$HTMLFILE"
 
     <div id="content" style="display:none">
         
+        <p class="sum-chart-note">Actual traffic: blue = received, green = sent. Estimates are shown separately.</p>
         <div class="summary-card">
             <div class="summary-col">
                 <div class="sum-title">Today</div>
@@ -311,6 +354,7 @@ cat <<EOF > "$HTMLFILE"
                         <div class="stat-row" style="margin-top:2px"><span style="color:var(--text-gray)">Tot:</span> <span class="c-tot" id="s_all_tot">-</span></div>
                         <div style="margin-top:8px; font-size:11px; color:var(--text-gray); text-align:right;">Since:<br><span id="s_created">-</span></div>
                     </div>
+                    <div class="sum-chart"><canvas id="pie_total"></canvas></div>
                 </div>
             </div>
         </div>
@@ -319,7 +363,7 @@ cat <<EOF > "$HTMLFILE"
             <div class="card-head">Last 24 Hours</div>
             <div class="table-responsive">
                 <table id="tab_hour">
-                    <thead><tr><th>Hour</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
+                    <thead><tr><th>Hour</th><th class="th-number">Rx</th><th class="th-number">Tx</th><th class="th-number">Total</th><th class="th-number">Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -329,7 +373,7 @@ cat <<EOF > "$HTMLFILE"
             <div class="card-head">Daily History</div>
             <div class="table-responsive">
                 <table id="tab_day">
-                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
+                    <thead><tr><th>Date</th><th class="th-number">Rx</th><th class="th-number">Tx</th><th class="th-number">Total</th><th class="th-number">Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -339,7 +383,7 @@ cat <<EOF > "$HTMLFILE"
             <div class="card-head">Monthly History</div>
             <div class="table-responsive">
                 <table id="tab_mon">
-                    <thead><tr><th>Month</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
+                    <thead><tr><th>Month</th><th class="th-number">Rx</th><th class="th-number">Tx</th><th class="th-number">Total</th><th class="th-number">Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -349,7 +393,7 @@ cat <<EOF > "$HTMLFILE"
             <div class="card-head">Yearly History</div>
             <div class="table-responsive">
                 <table id="tab_year">
-                    <thead><tr><th>Year</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
+                    <thead><tr><th>Year</th><th class="th-number">Rx</th><th class="th-number">Tx</th><th class="th-number">Total</th><th class="th-number">Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -359,7 +403,7 @@ cat <<EOF > "$HTMLFILE"
             <div class="card-head">Top 10 Days</div>
             <div class="table-responsive">
                 <table id="tab_top">
-                    <thead><tr><th>Date</th><th>Rx</th><th>Tx</th><th>Total</th><th>Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
+                    <thead><tr><th>Date</th><th class="th-number">Rx</th><th class="th-number">Tx</th><th class="th-number">Total</th><th class="th-number">Avg Rate</th><th class="th-graph">Volume</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -382,19 +426,8 @@ cat <<EOF > "$HTMLFILE"
 
         window._chartInstances = [];
 
-        function fmt(bytes) {
-            if (!bytes) return '0 B';
-            const k = 1024; const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function fmtBits(bps) {
-            if (bps < 1000) return bps.toFixed(2) + " bit/s";
-            const k = 1000; const sizes = ['kbit/s', 'Mbit/s', 'Gbit/s', 'Tbit/s'];
-            const i = Math.floor(Math.log(bps) / Math.log(k));
-            return parseFloat((bps / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i-1];
-        }
+        function fmt(bytes) {return window.KTFormat.bytes(bytes,1024,2);}
+        function fmtBits(bps) {return window.KTFormat.scaled(bps,1000,['bit/s','kbit/s','Mbit/s','Gbit/s','Tbit/s'],2);}
 
         function pDate(d, type) {
             if(!d) return "-";
@@ -473,10 +506,16 @@ cat <<EOF > "$HTMLFILE"
         }
 
         function renderData(ifaceName, aliasName) {
+            localStorage.setItem('traffic_interface',ifaceName);
+            const picker = document.getElementById('traffic_interface');
+            if(!picker.options.length) document.querySelectorAll('[data-iface]').forEach(b=>{const option=document.createElement('option');option.value=b.dataset.iface;option.textContent=(window.TRAFFIC_ALIASES||{})[b.dataset.iface]||b.dataset.iface;picker.append(option);});
+            picker.value=ifaceName;
+            aliasName = aliasName || (window.TRAFFIC_ALIASES || {})[ifaceName] || ifaceName;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('tab_' + ifaceName).classList.add('active');
 
-            const data = window['TRAFFIC_' + ifaceName];
+            document.querySelectorAll('[data-iface]').forEach(b => { b.textContent=(window.TRAFFIC_ALIASES||{})[b.dataset.iface]||b.dataset.iface; b.onclick=()=>renderData(b.dataset.iface); });
+            const data = window.TRAFFIC_DATA && window.TRAFFIC_DATA[ifaceName];
             if(!data || data.error) {
                 document.getElementById('content').style.display = 'none';
                 document.getElementById('loading').style.display = 'block';
@@ -498,6 +537,9 @@ cat <<EOF > "$HTMLFILE"
             document.getElementById('iface_name').innerText = aliasName ? aliasName : (iface.name || iface.id);
             if(iface.created && iface.created.date) document.getElementById('s_created').innerText = pDate(iface.created.date, 'f');
 
+            document.getElementById('data_freshness').dataset.epoch = iface.updated && iface.updated.date ? String(dbTime.getTime()) : '';
+            const age=(Date.now()-dbTime.getTime())/60000;
+            document.getElementById('data_freshness').textContent='Database updated: '+dbTime.toLocaleString('en-GB')+(age>30?' — data older than 30 minutes':'');
             // --- 1. SUMMARY ---
             const getLast = (arr, offset) => arr[arr.length - 1 - offset] || {rx:0, tx:0};
             
@@ -515,6 +557,7 @@ cat <<EOF > "$HTMLFILE"
             fillSum('s_td', today); fillSum('s_yd', yest);
             fillSum('s_tm', tmon);  fillSum('s_lm', lmon);
             fillSum('s_all', total);
+            if(window.MONTHLY_QUOTA_GB>0){const used=(tmon.rx+tmon.tx)/1e9;document.getElementById('data_quota').textContent='Monthly quota: '+window.KTFormat.number(used,2,2)+' / '+window.KTFormat.number(window.MONTHLY_QUOTA_GB,0,3)+' GB; remaining '+window.KTFormat.number(Math.max(0,window.MONTHLY_QUOTA_GB-used),2,2)+' GB';}
             
             // FIXED: Passing 'm' format (month+year) for summary headers
             if(tmon.date) document.getElementById('lbl_tm').innerText = pDate(tmon.date, 'm');
@@ -535,23 +578,20 @@ cat <<EOF > "$HTMLFILE"
             window._chartInstances = [];
 
             const mkPie = (id, cur, rem, isPast) => {
-                let colRx = isPast ? COL_RX_OLD : COL_RX;
-                let colTx = isPast ? COL_TX_OLD : COL_TX;
-                
-                let d = [cur.rx, cur.tx];
-                let c = [colRx, colTx];
-                
-                if(rem) {
-                    d.push(rem.rx, rem.tx);
-                    c.push(COL_RX_A, COL_TX_A);
-                }
+                // Use the same semantic colors for all periods; projections stay in the text summary.
+                const style = getComputedStyle(document.body);
+                const colRx = style.getPropertyValue('--blue').trim() || '#0097dc';
+                const colTx = style.getPropertyValue('--green').trim() || '#1e7049';
+                const d = [cur.rx, cur.tx];
+                const c = [colRx, colTx];
                 const chart = new Chart(document.getElementById(id), {
                     type: 'doughnut',
-                    data: { labels:[], datasets:[{data:d, backgroundColor:c, borderWidth:0}] },
+                    data: { labels:['Received','Sent'], datasets:[{data:d, backgroundColor:c, borderColor:style.getPropertyValue('--background').trim(), borderWidth:2, hoverOffset:2}] },
                     options: { 
-                        cutout:'25%', 
-                        layout: { padding: 5 }, 
-                        plugins:{tooltip:{enabled:false}, legend:{display:false}}, 
+                        locale:window.KTFormat.locale,
+                        cutout:'72%', 
+                        layout: { padding: 2 }, 
+                        plugins:{tooltip:{enabled:true,callbacks:{label:ctx=>ctx.label+': '+fmt(ctx.raw)}}, legend:{display:false}}, 
                         maintainAspectRatio:false 
                     }
                 });
@@ -562,6 +602,7 @@ cat <<EOF > "$HTMLFILE"
             mkPie('pie_yesterday', yest, null, true);
             mkPie('pie_month', tmon, remMon, false); 
             mkPie('pie_lmonth', lmon, null, true);
+            mkPie('pie_total', total, null, false);
 
             // --- 2. TABLES ---
             const renderTable = (arr, type, tabId, limit, showEst, sortDesc) => {
@@ -574,7 +615,7 @@ cat <<EOF > "$HTMLFILE"
                 }
                 
                 const tbody = document.querySelector('#'+tabId+' tbody');
-                tbody.innerHTML = ''; // SVUOTA LA TABELLA PER IL CAMBIO TAB
+                tbody.innerHTML = ''; // Clear rows before switching the displayed period.
                 
                 let maxVal = 0;
                 data.forEach(d => { if((d.rx+d.tx) > maxVal) maxVal = (d.rx+d.tx); });
@@ -598,7 +639,7 @@ cat <<EOF > "$HTMLFILE"
                     const r = document.createElement('tr');
                     if(isEst) r.classList.add('row-est');
                     
-                    let dateStr = isEst ? "estimated" : pDate(x, type);
+                    let dateStr = isEst ? "estimated" : pDate(x, tabId === 'tab_top' ? 'f' : type);
                     
                     r.innerHTML = \`
                         <td>\${dateStr}</td>
@@ -624,19 +665,38 @@ cat <<EOF > "$HTMLFILE"
             renderTable(tr.day, 'd', 'tab_top', 10, false, true);
         }
 
+        window.ktRefreshPage=async()=>{
+            const iface=document.getElementById('traffic_interface').value;
+            const names=[...new Set([...Object.keys(window.TRAFFIC_DATA||{}),...Array.from(document.querySelectorAll('[data-iface]'),node=>node.dataset.iface)])];
+            const exports=await Promise.allSettled(names.map(async name=>{
+                const response=await fetch(encodeURIComponent(name)+'_data.js?t='+Date.now(),{cache:'no-store'});
+                if(!response.ok)throw Error('Traffic data unavailable');
+                return await response.text();
+            }));
+            const failed=exports.find(item=>item.status==='rejected');if(failed)throw failed.reason;
+            for(const item of exports)window.eval(item.value);
+            renderData(document.getElementById('traffic_interface').value||iface||names[0]);
+        };
         window.onload = function() {
             const firstAlias = "$ALIASES".split(" ")[0] || '$FIRST_IFACE';
             setTimeout(function() {
-                renderData('$FIRST_IFACE', firstAlias);
+                const savedInterface = localStorage.getItem('traffic_interface');
+                renderData(Object.prototype.hasOwnProperty.call(window.TRAFFIC_DATA || {}, savedInterface) ? savedInterface : '$FIRST_IFACE');
             }, 100);
         };
     </script>
+<footer class="kt-page-footer">&copy; <span data-kt-year>2026</span> mattheweli<span class="kt-footer-meta">Traffic Manager 2.0.0</span></footer>
 </body>
 </html>
 EOF
+chmod 644 "$HTML_TMP" || { rm -f "$HTML_TMP"; exit 1; }
+mv "$HTML_TMP" "$HTMLFILE"
+printf '%s\n' "$SIGNATURE" > "$OUTDIR/.signature"
 
 # --- 4. GENERATE JS INDEX FOR DASHBOARD ---
 INDEX_FILE="${OUTDIR}/vnstat_index.js"
 echo "window.VNSTAT_INTERFACES = \"$IFACES\";" > "$INDEX_FILE"
+chmod 644 "$INDEX_FILE" || exit 1
 
 fi
+
